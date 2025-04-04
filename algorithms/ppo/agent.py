@@ -1,4 +1,5 @@
 import os
+import torch
 import numpy as np
 import torch as T
 import torch.nn as nn
@@ -159,8 +160,8 @@ class CriticNetwork(nn.Module):
 
 
 class Agent:
-    def __init__(self, action_dims, input_dims, fc1_dims=1024, fc2_dims=1024, gamma=0.95, alpha=0.0005,
-                 gae_lambda=0.99, policy_clip=0.3, batch_size=64, n_epochs=30, entropy=0):
+    def __init__(self, action_dims, input_dims, fc1_dims=256, fc2_dims=256, gamma=0.99, alpha=0.0003,
+                 gae_lambda=0.95, policy_clip=0.2, batch_size=64, n_epochs=10, entropy=0):
         self.gamma = gamma
         self.policy_clip = policy_clip
         self.n_epochs = n_epochs
@@ -191,8 +192,8 @@ class Agent:
     def choose_action(self, observation):
         self.actor.eval()
         self.critic.eval()
-        state = T.tensor([observation], dtype=T.float).to(self.actor.device)
 
+        state = T.tensor([observation], dtype=T.float).to(self.actor.device)
         mu, var = self.actor(state)
         dist = Normal(mu, var.clamp(min=1e-3))
         value = self.critic(state)
@@ -214,35 +215,28 @@ class Agent:
 
             values = vals_arr
             advantage = np.zeros(len(reward_arr), dtype=np.float32)
+            
 
             for t in range(len(reward_arr) - 1):
-                discount = 1
-                a_t = 0
+                discount = 1.0
+                a_t = 0.0
                 for k in range(t, len(reward_arr) - 1):
-                    a_t += discount * (reward_arr[k] + self.gamma * values[k + 1] * (1 - int(dones_arr[k])) - values[k])
+                    r = float(np.squeeze(reward_arr[k]))
+                    v = float(np.squeeze(values[k]))
+                    v_next = float(np.squeeze(values[k + 1]))
+                    done = int(dones_arr[k])
+                    a_t += discount * (r + self.gamma * v_next * (1 - done) - v)
                     discount *= self.gamma * self.gae_lambda
-                advantage[t] = a_t
-            advantage = T.tensor(advantage).to(self.actor.device)
-
+                advantage[t] = a_t  # 已保證是 float
+                
+            advantage = T.tensor(advantage, dtype=T.float).to(self.actor.device)
             values = T.tensor(values).to(self.actor.device)
             for batch in batches:
-                states = T.tensor(state_arr[batch], dtype=T.float)
-                states = T.nan_to_num(states, nan=0.0, posinf=1e5, neginf=-1e5)
-                states = T.clamp(states, -1e5, 1e5)
-                states = states.to(self.actor.device)
+                states = T.tensor(state_arr[batch], dtype=T.float).to(self.actor.device)
                 old_probs = T.tensor(old_prob_arr[batch]).to(self.actor.device)
                 actions = T.tensor(action_arr[batch]).to(self.actor.device)
-                
 
                 mu, var = self.actor(states)
-
-                if T.isnan(mu).any() or T.isnan(var).any():
-                    print("❗ NaN detected in actor forward during learn()")
-                    print("mu:", mu)
-                    print("var:", var)
-                    print("states (sample):", states[:1])
-                    raise ValueError("NaN in actor output during learn()")
-
                 dist = Normal(mu, var.clamp(min=1e-3))
                 critic_value = self.critic(states)
 

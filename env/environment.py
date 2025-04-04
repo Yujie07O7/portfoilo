@@ -9,14 +9,9 @@ class PortfolioEnv:
 
     def __init__(self, start_date=None, end_date=None, action_scale=1, action_interpret='transactions',
                  state_type='indicators', djia_year=2019):
-        np.set_printoptions(suppress=True, precision=2)
+        
         self.loader = Loader(djia_year=djia_year)
         self.historical_data = self.loader.load(start_date, end_date)
-        for stock in self.historical_data:
-            stock['MA20'] = TA.SMA(stock, 20)
-            stock['MA50'] = TA.SMA(stock, 50)
-            stock['MA200'] = TA.SMA(stock, 200)
-            stock['ATR'] = TA.ATR(stock)
         self.n_stocks = len(self.historical_data)
         self.prices = np.zeros(self.n_stocks)
         self.shares = np.zeros(self.n_stocks).astype(np.int64)
@@ -26,7 +21,7 @@ class PortfolioEnv:
         self.action_scale = action_scale
         self.action_interpret = action_interpret
         self.state_type = state_type
-        self.history_log = []
+
         # 第一步驟
         self.freerate = 0
         self.windows = 30
@@ -41,7 +36,6 @@ class PortfolioEnv:
             return (2 * self.n_stocks + 1,)
         if self.action_interpret == 'transactions' and self.state_type == 'indicators':
             return (6 * self.n_stocks + 1,)  
-
 
     def action_shape(self):
         if self.action_interpret == 'portfolio':
@@ -62,6 +56,7 @@ class PortfolioEnv:
         self.prices = self.get_prices()
         self.shares = np.zeros(self.n_stocks).astype(np.int64)
         self.balance = initial_balance
+        self.wealth_history = [self.get_wealth()]
 
         return self.get_state()
 
@@ -70,33 +65,27 @@ class PortfolioEnv:
         print(f"當前價格: {prices}")  # Debug
         return prices
 
-
-    def clean_state(self, state):
-        state = np.array(state, dtype=np.float32)
-        state = np.nan_to_num(state, nan=0.0, posinf=1e5, neginf=-1e5)
-        return np.clip(state, -1e5, 1e5)
-
+    
     def get_state(self):
 
         if self.action_interpret == 'portfolio' and self.state_type == 'only prices':
-            state = self.prices.tolist()
-            return self.clean_state(state)
+            return self.prices.tolist()
 
         if self.action_interpret == 'portfolio' and self.state_type == 'indicators':
             state = []
             for stock in self.historical_data:
                 state.extend(stock[['Open', 'High', 'Low', 'Close', 'Volume']].iloc[self.current_row])
-            return self.clean_state(state)
+            return np.array(state)
         
         if self.action_interpret == 'transactions' and self.state_type == 'only prices':
-            state = [self.balance] + self.prices.tolist() + self.shares.tolist()
-            return self.clean_state(state)
+            return [self.balance] + self.prices.tolist() + self.shares.tolist()
         
         if self.action_interpret == 'transactions' and self.state_type == 'indicators':
             state = [self.balance] + self.shares.tolist()
             for stock in self.historical_data:
                 state.extend(stock[['Open', 'High', 'Low', 'Close', 'Volume']].iloc[self.current_row])
-            return self.clean_state(state)
+            
+            return np.array(state)
 
     def is_finished(self):
         return self.current_row == self.end_row
@@ -158,73 +147,64 @@ class PortfolioEnv:
 
     # 第二步驟
     def step(self, action, softmax=True):
-        previous_wealth = self.get_wealth()
-        previous_sharpe = self._calculate_sharpe_ratio()
 
         if self.action_interpret == 'portfolio':
+            current_wealth = self.get_wealth()
             if softmax:
                 action = F.softmax(T.tensor(action, dtype=T.float), -1).numpy()
             else:
                 action = np.array(action)
 
-            new_shares = np.floor(previous_wealth * action[1:] / self.prices)
+            new_shares = np.floor(current_wealth * action[1:] / self.prices)
             actions = new_shares - self.shares
             cost = self.prices.dot(actions)
+            self.wealth_history.append(self.get_wealth())  # 每一步累積資產記錄
+
 
             self.shares = self.shares + actions.astype(np.int64)
             self.balance -= cost
+            self.current_row += 1
+            new_prices = self.get_prices()
+            portfolio_value_before = np.sum(self.prices * self.shares)
+            portfolio_value_after = np.sum(new_prices * self.shares)
+            reward = (portfolio_value_after - portfolio_value_before) / (portfolio_value_before + 1e-8)*10000 # 加1e-8避免除0
+            self.prices = new_prices
 
-        #這邊可能要換成算出投資組合的權重加總=1加總=1
+        #這邊可能要換成算出投資組合的權重加總=1
         elif self.action_interpret == 'transactions':
-            actions = np.clip(action, -1, +1)
-            positive = actions > 0
-            negative = actions < 0
-            actions[negative] = np.ceil(actions[negative] * self.shares[negative])
-            if np.sum(self.prices[positive] * actions[positive]) > 0:
-                k = (self.balance - np.sum(self.prices[negative] * actions[negative])) 
-                np.sum(self.prices[positive] * actions[positive])
-            else:   
-                k = 0
-            actions[positive] = np.floor(actions[positive] * k)
-
+            actions = np.maximum(np.round(np.array(action) * self.action_scale), -self.shares)
             cost = self.prices.dot(actions)
-            self.shares = self.shares + actions
+            if cost > self.balance:
+                actions = np.floor(actions * self.balance / cost)
+                cost = self.prices.dot(actions)
+            self.shares = self.shares + actions.astype(np.int64) 
             #balance是手上剩多少資金
             self.balance -= cost
-
-        # 更新價格與資產
-        self.current_row += 1
-        new_prices = self.get_prices()
-        self.prices = new_prices
-
-        new_wealth = self.get_wealth()
-        portfolio_return = (new_wealth - previous_wealth) / previous_wealth
-        self.returns.append(portfolio_return)
-
-        sharpe_ratio = self._calculate_sharpe_ratio()
-        cumulative_return = new_wealth - 1000000
-        reward = (sharpe_ratio - previous_sharpe) + (new_wealth - previous_wealth) * 100
+            self.current_row += 1
+            new_prices = self.get_prices()
+            
+             # 📌 計算 portfolio value：包含股票市值變化前後
+            portfolio_value_before = np.sum(self.prices * self.shares)
+            portfolio_value_after = np.sum(new_prices * self.shares)
+            #這邊*10000是因為要放大reward的數值
+            reward = (portfolio_value_after - portfolio_value_before) / (portfolio_value_before + 1e-8)*10000 # 加1e-8避免除0
+            self.returns.append(reward)
+            self.prices = new_prices
+            new_wealth = self.get_wealth()
+            cumulative_return = new_wealth - 1000000
+        # 數值穩定性保護（避免爆掉），也在這邊加入持股限制
+        self.balance = np.clip(self.balance, -1e6, 1e6)
+        self.shares = np.clip(self.shares, 2000, 30000)
 
         # Debug print
         print(f"日期: {self.get_date()}, 當前價格: {self.prices}")
         print(f"持股: {self.shares}, 資金: {self.balance}, 總資產: {new_wealth}")
-        print(f"Sharpe Ratio: {sharpe_ratio}, Reward: {reward}, Cumulative Return: {cumulative_return}")
-        # 儲存每個 step 的歷史資料
-        self.history_log.append({
-            'date': self.get_date(),
-            'balance': self.balance,
-            'wealth': new_wealth,
-            'shares': self.shares.copy(),
-            'prices': self.prices.copy(),
-            'sharpe_ratio': sharpe_ratio,
-            'reward': reward
-        })
+        print(f"Reward: {reward}, Cumulative Return: {cumulative_return}")
         return self.get_state(), reward, self.is_finished(), self.get_date(), self.get_wealth()
     def _calculate_sharpe_ratio(self, window_size=30):
         min_window = min(len(self.returns), window_size)
         if min_window < 5:  
             return 0
-
         recent_returns = np.array(self.returns[-min_window:])
         mean_return = np.mean(recent_returns)
         std_return = np.std(recent_returns) + 1e-8  # 防止除以 0

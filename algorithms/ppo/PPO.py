@@ -43,6 +43,7 @@ class PPO:
                 action, prob, val = self.agent.choose_action(observation)
                 observation_, reward, done, info, wealth = self.env.step(action)
                 n_steps += 1
+                self.env.wealth_history.append(self.env.get_wealth())
                 self.agent.remember(observation, action, prob, val, reward, done)
                 if n_steps % self.t_max == 0:
                     self.agent.learn()
