@@ -14,7 +14,7 @@ def main():
     plot.initialize()
     mp.set_start_method('spawn')
     np.set_printoptions(suppress=True)
-    for i in range(2):
+    for i in range(50):
         print(f"---------- round {i} ----------")
         if not os.path.isfile(f'plots/ppo/{i}2_testing.png'):
             ppo = PPO(state_type='indicators', djia_year=2019, repeat=i)

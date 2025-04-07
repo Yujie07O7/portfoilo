@@ -9,9 +9,9 @@ class PortfolioEnv:
 
     def __init__(self, start_date=None, end_date=None, action_scale=1, action_interpret='transactions',
                  state_type='indicators', djia_year=2019):
-        
         self.loader = Loader(djia_year=djia_year)
         self.historical_data = self.loader.load(start_date, end_date)
+        self.marco_indicators = self.loader.load_marco_data(start_date, end_date)
         self.n_stocks = len(self.historical_data)
         self.prices = np.zeros(self.n_stocks)
         self.shares = np.zeros(self.n_stocks).astype(np.int64)
@@ -21,6 +21,8 @@ class PortfolioEnv:
         self.action_scale = action_scale
         self.action_interpret = action_interpret
         self.state_type = state_type
+        self.macro_dim = self.marco_indicators.shape[1]
+
 
         # 第一步驟
         self.freerate = 0
@@ -31,12 +33,12 @@ class PortfolioEnv:
         if self.action_interpret == 'portfolio' and self.state_type == 'only prices':
             return (self.n_stocks,)
         if self.action_interpret == 'portfolio' and self.state_type == 'indicators':
-            return (5 * self.n_stocks,)
+            return (5 * self.n_stocks + self.macro_dim,)
         if self.action_interpret == 'transactions' and self.state_type == 'only prices':
             return (2 * self.n_stocks + 1,)
         if self.action_interpret == 'transactions' and self.state_type == 'indicators':
-            return (6 * self.n_stocks + 1,)  
-
+            return (5* self.n_stocks + 3 + self.macro_dim,)  
+            
     def action_shape(self):
         if self.action_interpret == 'portfolio':
             return self.n_stocks + 1,
@@ -75,6 +77,9 @@ class PortfolioEnv:
             state = []
             for stock in self.historical_data:
                 state.extend(stock[['Open', 'High', 'Low', 'Close', 'Volume']].iloc[self.current_row])
+            # 加入景氣變數
+            if hasattr(self, 'macro_indicators'):
+                state.extend(self.macro_indicators[self.current_row])
             return np.array(state)
         
         if self.action_interpret == 'transactions' and self.state_type == 'only prices':
@@ -84,8 +89,10 @@ class PortfolioEnv:
             state = [self.balance] + self.shares.tolist()
             for stock in self.historical_data:
                 state.extend(stock[['Open', 'High', 'Low', 'Close', 'Volume']].iloc[self.current_row])
-            
+            if hasattr(self, 'macro_indicators'):
+                state.extend(self.macro_indicators[self.current_row])
             return np.array(state)
+
 
     def is_finished(self):
         return self.current_row == self.end_row

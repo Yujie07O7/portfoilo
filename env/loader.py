@@ -32,6 +32,28 @@ class Loader:
                 self.stocks.append(data)
             except FileNotFoundError:
                 print(f"Warning: Data file for {ticker} not found, skipping.")
+    def load_marco_data(self, start_date=None, end_date=None):
+        macro = pd.read_csv(f'env/data/DJIA_2019/business.csv', parse_dates=True, index_col='date')
+        macro = macro.fillna(method='ffill').fillna(method='bfill')
+
+        # 若 start/end 沒有給，就從股票資料自動推斷
+        if start_date is None or end_date is None:
+            if len(self.stocks) > 0:
+                stock_index = self.stocks[0].index
+                if start_date is None:
+                    start_date = stock_index[0]
+                if end_date is None:
+                    end_date = stock_index[-1]
+            else:
+                raise ValueError("start_date and end_date are None, and no stock data to infer from.")
+            macro = macro[(macro.index >= pd.to_datetime(start_date)) & (macro.index <= pd.to_datetime(end_date))]
+                    # ✅ 對齊股票時間（可選）
+            if len(self.stocks) > 0:
+                stock_index = self.stocks[0].index
+                macro = macro.loc[macro.index.intersection(stock_index)]
+            print(macro.iloc[0])
+            print(macro.iloc[-1])
+            return macro.values
 
     def load(self, download=False, start_date=None, end_date=None):
         if download:
