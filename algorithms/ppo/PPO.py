@@ -48,9 +48,7 @@ class PPO:
                 if n_steps % self.t_max == 0:
                     self.agent.learn()
                 observation = observation_
-                if verbose:
-                    print(f"PPO training - Date: {info.date()},\tBalance: {int(self.env.get_balance())},\t"
-                          f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
+
             self.agent.memory.clear_memory()
 
             print(f"PPO training - Iteration: {iteration},\tCumulative Return: {int(wealth) - 1000000}")
@@ -67,18 +65,11 @@ class PPO:
             iteration += 1
 
         self.agent.load_models(self.checkpoint_dir)
-
-        buy_hold_history = self.env.buy_hold_history(*self.intervals['training'])
-        buy_hold_final = (buy_hold_history[-1] / buy_hold_history[0] - 1) * 1000000
-        add_hline(buy_hold_final, 'Buy&Hold')
         add_curve(training_history, 'PPO')
         save_plot(filename=self.figure_dir + f'/{self.repeat}0_training.png',
                   title=f"Training - {self.intervals['training'][0].date()} to {self.intervals['training'][1].date()}",
                   x_label='Iteration', y_label='Cumulative Return (Dollars)')
-
-        buy_hold_history = self.env.buy_hold_history(*self.intervals['validation'])
-        buy_hold_final = (buy_hold_history[-1] / buy_hold_history[0] - 1) * 1000000
-        add_hline(buy_hold_final, 'Buy&Hold')
+        
         add_curve(validation_history, 'PPO')
         save_plot(filename=self.figure_dir + f'/{self.repeat}1_validation.png',
                   title=f"Validation - {self.intervals['validation'][0].date()} to {self.intervals['validation'][1].date()}",
@@ -92,15 +83,10 @@ class PPO:
             action, prob, val = self.agent.choose_action(observation)
             observation_, reward, done, info, wealth = self.env.step(action)
             observation = observation_
-            if verbose:
-                print(f"PPO validation - Date: {info.date()},\tBalance: {int(self.env.get_balance())},\t"
-                      f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
         return wealth
     
     def test(self, verbose=1):
         return_history = [0]
-        buy_hold_history = self.env.buy_hold_history(*self.intervals['testing'])
-        add_curve((buy_hold_history / buy_hold_history[0] - 1) * 1000000, 'Buy&Hold')
         n_steps = 0
 
         observation = self.env.reset(*self.intervals['testing'])
@@ -114,9 +100,6 @@ class PPO:
             if n_steps % self.t_max == 0:
                 self.agent.learn()
             observation = observation_
-            if verbose:
-                print(f"PPO testing - Date: {info.date()},\tBalance: {int(self.env.get_balance())},\t"
-                    f"Cumulative Return: {int(wealth) - 1000000},\tShares: {self.env.get_shares()}")
                 
             return_history.append(wealth - 1000000)
             wealth_history.append(wealth)
@@ -127,7 +110,7 @@ class PPO:
                   title=f"Testing - {self.intervals['testing'][0].date()} to {self.intervals['testing'][1].date()}",
                   x_label='Days', y_label='Cumulative Return (Dollars)')
 
-        returns = pd.Series(wealth_history, buy_hold_history.index).pct_change().dropna()
+        returns = pd.Series(wealth_history).pct_change().dropna()
         stats = timeseries.perf_stats(returns)
         stats.to_csv(self.figure_dir + f'/{self.repeat}3_perf.csv')
 
