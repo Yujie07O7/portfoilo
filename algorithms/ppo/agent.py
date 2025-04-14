@@ -73,12 +73,12 @@ class ActorNetwork(nn.Module):
         # T.nn.init.uniform_(self.pi2.bias.data, -f2, f2)
         self.bn2 = nn.LayerNorm(fc2_dims)
 
-        self.mu = nn.Linear(fc2_dims, *action_dims)
+        self.mu = nn.Linear(fc2_dims, action_dims)
         # f3 = 0.003
         # T.nn.init.uniform_(self.mu.weight.data, -f3, f3)
         # T.nn.init.uniform_(self.mu.bias.data, -f3, f3)
 
-        self.var = nn.Linear(fc2_dims, *action_dims)
+        self.var = nn.Linear(fc2_dims, action_dims)
         # f4 = 0.003
         # T.nn.init.uniform_(self.var.weight.data, -f4, f4)
         # T.nn.init.uniform_(self.var.bias.data, -f4, f4)

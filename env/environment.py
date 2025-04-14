@@ -10,7 +10,7 @@ class PortfolioEnv:
     def __init__(self, start_date=None, end_date=None, action_scale=1, action_interpret='portfolio',
                  state_type='indicators', djia_year=2019):
         self.loader = Loader(djia_year=djia_year)
-        self.historical_data = self.loader.load(start_date, end_date)
+        self.historical_data = pd.read_csv("env/data/DJIA_2019/ticker_all.csv", index_col=0, parse_dates=True)
         self.marco_indicators = self.loader.load_marco_data(start_date, end_date)
         self.n_stocks = len(self.historical_data)
         self.prices = np.zeros(self.n_stocks)
@@ -21,33 +21,29 @@ class PortfolioEnv:
         self.action_scale = action_scale
         self.action_interpret = action_interpret
         self.state_type = state_type
-        self.macro_dim = self.marco_indicators.shape[1]
+        self.macro_dim = self.macro_indicators.shape[1] if hasattr(self, "macro_indicators") else 0
 
 
         # 第一步驟
         self.freerate = 0
         self.windows = 30
         self.returns = []
-        
+    def action_shape(self):
+        return 3
+           
     def state_shape(self):
         if self.action_interpret == 'portfolio' and self.state_type == 'only prices':
             return (self.n_stocks,)
         if self.action_interpret == 'portfolio' and self.state_type == 'indicators':
-            return (2 * self.n_stocks,)
+            return (9 + self.macro_dim,)
         if self.action_interpret == 'transactions' and self.state_type == 'only prices':
             return (2 * self.n_stocks + 1,)
         if self.action_interpret == 'transactions' and self.state_type == 'indicators':
             return (5* self.n_stocks + 3 + self.macro_dim,)  
             
-    def action_shape(self):
-        if self.action_interpret == 'portfolio':
-            return self.n_stocks,
-        if self.action_interpret == 'transactions':
-            return self.n_stocks,
 
     def reset(self, start_date=None, end_date=None, initial_balance=1000000):
-        index = self.historical_data[0].index
-        index = index.drop_duplicates() 
+        index = self.historical_data.index.drop_duplicates()
         self.weight_history = []
 
         if start_date is None:
@@ -68,27 +64,26 @@ class PortfolioEnv:
         return self.get_state()
 
     def get_returns(self):
-        returns = np.array([stock['Return'].iloc[self.current_row] for stock in self.historical_data])
+        returns = self.historical_data.iloc[self.current_row][["AGGReturn(M)", "DBCReturn(M)", "SPYReturn(M)"]].tolist()
         return returns
 
     def get_state(self):
-        if self.current_row >= len(self.historical_data[0]):
+        if self.current_row >= len(self.historical_data):
             print(f"[Warning] current_row 超出範圍，自動設為最後一筆 index")
-            self.current_row = len(self.historical_data[0]) - 1
+            self.current_row = len(self.historical_data) - 1
         if self.action_interpret == 'portfolio' and self.state_type == 'only prices':
             return self.prices.tolist()
 
         if self.action_interpret == 'portfolio' and self.state_type == 'indicators':
-            state = []
-            for stock in self.historical_data:
-                max_idx = len(stock) - 1
-                safe_row = min(self.current_row, max_idx)
-                state.extend(stock[['Return', 'STD']].iloc[safe_row])
-            # 加入景氣變數
+            state = self.historical_data.iloc[self.current_row] [[
+                'AGGReturn(M)', 'DBCReturn(M)', 'SPYReturn(M)',
+                'AGGSTD', 'DBCSTD', 'SPYSTD',
+                'AGG-DBCCOV', 'AGG-SPYCOV', 'DBC-SPYCOV'
+            ]].tolist()
             if hasattr(self, 'macro_indicators'):
                 state.extend(self.macro_indicators[self.current_row])
-            return np.array(state)
-        
+            return np.array(state)   
+             
         if self.action_interpret == 'transactions' and self.state_type == 'only prices':
             return [self.balance] + self.prices.tolist() + self.shares.tolist()
         
@@ -104,7 +99,7 @@ class PortfolioEnv:
         return bool(self.current_row >= self.end_row)
 
     def get_date(self):
-        return self.historical_data[0].index[self.current_row]
+        return self.historical_data.index[self.current_row]
 
     def get_wealth(self):
         return self.prices.dot(self.shares) + self.balance
@@ -122,7 +117,7 @@ class PortfolioEnv:
         return weights
 
     def get_intervals(self, train_ratio=0.7, valid_ratio=0.15, test_ratio=0.15):
-        index = self.historical_data[0].index.drop_duplicates()
+        index = self.historical_data.index.drop_duplicates()
         size = len(index)
 
         train_begin = 0
@@ -156,9 +151,10 @@ class PortfolioEnv:
         returns = self.get_returns()
 
         # 將報酬率套用到每個資產配置比例上，模擬總報酬率
-        portfolio_return = np.dot(action, returns)
-
+        #配置在各個資產的投資比例（action），乘上這些資產在這一期的報酬率（returns），並把結果加總起來，得到你整個投資組合的報酬率
+        #就是E(rp)=w1*p1+w2*p2+w3*p3
         # reward 可以放大一點看得比較清楚
+        portfolio_return = np.dot(action, returns)
         reward = portfolio_return * 10000
 
         self.returns.append(reward)

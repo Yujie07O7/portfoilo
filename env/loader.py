@@ -3,8 +3,10 @@ import pandas as pd
 import os
 
 class Loader:
-    def __init__(self, djia_year):
+    def __init__(self, djia_year=None, start_date=None, end_date=None):
         self.djia_year = djia_year
+        self.start_date = start_date
+        self.end_date = end_date
         file_path = os.path.join(os.path.dirname(__file__), f'data/DJIA_{djia_year}/tickers.txt')
 
         with open(file_path, 'r') as file:
@@ -29,7 +31,7 @@ class Loader:
             file_path = f'env/data/DJIA_2019/ticker_{ticker}.csv'
             try:
                 data = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date')
-                data = data[['Return', 'STD']]
+                data = data[['AGGReturn(M)', 'DBCReturn(M)', 'SPYReturn(M)', 'AGGSTD', 'DBCSTD', 'SPYSTD', 'AGG-DBCCOV', 'AGG-SPYCOV', 'DBC-SPYCOV']]
                 data['Ticker'] = ticker
                 self.stocks.append(data)
 
@@ -60,16 +62,16 @@ class Loader:
         # 若沒給日期，就從股票資料推斷
         if start_date is None:
             start_date = self.start_date
+            start_date = pd.to_datetime("2006-04-30")
         if end_date is None:
             end_date = self.end_date
-
+            end_date = pd.to_datetime("2025-03-31")
         # ✅ 加入條件檢查，避免 NaT 呼叫 normalize()
         if pd.notna(start_date):
             start_date = pd.to_datetime(start_date).normalize()
         if pd.notna(end_date):
             end_date = pd.to_datetime(end_date).normalize()
         macro.index = pd.to_datetime(macro.index).normalize()
-
         macro = macro[(macro.index >= start_date) & (macro.index <= end_date)]
 
         if len(self.stocks) > 0:
