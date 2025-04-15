@@ -22,8 +22,6 @@ class PortfolioEnv:
         self.action_interpret = action_interpret
         self.state_type = state_type
         self.macro_dim = self.macro_indicators.shape[1] if hasattr(self, "macro_indicators") else 0
-
-
         # 第一步驟
         self.freerate = 0
         self.windows = 30
@@ -141,49 +139,56 @@ class PortfolioEnv:
 
 
     # 第二步驟
-    def step(self, action, softmax=True):
+    def step(self, action, softmax=True, reward_mode="sharpe"):
         if softmax:
             action = F.softmax(T.tensor(action, dtype=T.float), -1).numpy()
         else:
             action = np.array(action)
-
-        # 獲取當前報酬率
         returns = self.get_returns()
-
+        
+        # 使用不同的 reward 模式
         # 將報酬率套用到每個資產配置比例上，模擬總報酬率
         #配置在各個資產的投資比例（action），乘上這些資產在這一期的報酬率（returns），並把結果加總起來，得到你整個投資組合的報酬率
         #就是E(rp)=w1*p1+w2*p2+w3*p3
         # reward 可以放大一點看得比較清楚
-        portfolio_return = np.dot(action, returns)
-        reward = portfolio_return * 10000
-
+        if reward_mode == "sharpe":
+            sharpe_ratio, portfolio_return = self._calculate_sharpe_ratio(action)
+            reward = sharpe_ratio * 10000
+        elif reward_mode == "return":
+            portfolio_return = np.dot(action, returns)
+            reward = portfolio_return * 10000
         self.returns.append(reward)
-        self.current_row += 1
         done = self.is_finished()
 
-        # wealth 模擬：假設初始 100 萬，每次根據報酬率累積
         last_wealth = self.wealth_history[-1]
         new_wealth = last_wealth * (1 + portfolio_return)
         self.wealth_history.append(new_wealth)
 
         print(f"日期: {self.get_date()}, 報酬率: {returns}, 配置: {action}")
         print(f"Reward: {reward:.2f}, Cumulative Return: {new_wealth - 1000000:.2f}")
-        
-        if self.current_row >= self.end_row:
-            done = True
-            return self.get_state(), reward, done, self.get_date(), new_wealth
 
         self.current_row += 1
         done = self.is_finished()
         return self.get_state(), reward, done, self.get_date(), new_wealth
 
-    def _calculate_sharpe_ratio(self, window_size=30):
-        min_window = min(len(self.returns), window_size)
-        if min_window < 5:  
-            return 0
-        recent_returns = np.array(self.returns[-min_window:])
-        mean_return = np.mean(recent_returns)
-        std_return = np.std(recent_returns) + 1e-8  # 防止除以 0
-        sharpe_ratio = (mean_return - self.freerate) / std_return
-        return sharpe_ratio
+    def _calculate_sharpe_ratio(self, action):
+        row = self.historical_data.iloc[self.current_row]
+        # 取出報酬率
+        returns = row[["AGGReturn(M)", "DBCReturn(M)", "SPYReturn(M)"]].values
+        # 取出標準差
+        stds = row[["AGGSTD", "DBCSTD", "SPYSTD"]].values
+        # 取出共變異數（上三角）
+        cov = row[["AGG-DBCCOV", "AGG-SPYCOV", "DBC-SPYCOV"]].values
+        cov_matrix = np.zeros((3, 3))
+        np.fill_diagonal(cov_matrix, stds**2)
+        cov_matrix[0, 1] = cov_matrix[1, 0] = cov[0]  # AGG-DBC
+        cov_matrix[0, 2] = cov_matrix[2, 0] = cov[1]  # AGG-SPY
+        cov_matrix[1, 2] = cov_matrix[2, 1] = cov[2]  # DBC-SPY
+        # 計算 Sharpe Ratio
+        portfolio_return = np.dot(action, returns)
+        portfolio_variance = np.dot(action, np.dot(cov_matrix, action))
+        portfolio_std = np.sqrt(portfolio_variance) + 1e-8
+        sharpe_ratio = (portfolio_return - self.freerate) / portfolio_std
+        return sharpe_ratio, portfolio_return
+
 
