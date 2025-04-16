@@ -8,7 +8,7 @@ import pandas as pd
 class PortfolioEnv:
 
     def __init__(self, start_date=None, end_date=None, action_scale=1, action_interpret='portfolio',
-                 state_type='indicators', djia_year=2019):
+                 state_type='indicators', djia_year=2019, repeat=0):
         self.loader = Loader(djia_year=djia_year)
         self.historical_data = pd.read_csv("env/data/DJIA_2019/ticker_all.csv", index_col=0, parse_dates=True)
         self.marco_indicators = self.loader.load_marco_data(start_date, end_date)
@@ -22,6 +22,9 @@ class PortfolioEnv:
         self.action_interpret = action_interpret
         self.state_type = state_type
         self.macro_dim = self.macro_indicators.shape[1] if hasattr(self, "macro_indicators") else 0
+        self.repeat= repeat
+        self.repeat = repeat if hasattr(self, "repeat") else 0
+        self.history_log = []  # 新增 log 記錄
         # 第一步驟
         self.freerate = 0
         self.windows = 30
@@ -166,7 +169,14 @@ class PortfolioEnv:
 
         print(f"日期: {self.get_date()}, 報酬率: {returns}, 配置: {action}")
         print(f"Reward: {reward:.2f}, Cumulative Return: {new_wealth - 1000000:.2f}")
-
+        self.history_log.append({
+            "round": self.repeat,
+            "date": self.get_date(),
+            "returns": returns,
+            "weights": action.tolist(),
+            "reward": reward,
+            "wealth": new_wealth
+        })
         self.current_row += 1
         done = self.is_finished()
         return self.get_state(), reward, done, self.get_date(), new_wealth

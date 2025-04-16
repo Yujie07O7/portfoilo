@@ -12,15 +12,13 @@ class PPO:
     def __init__(self, load=False, alpha=0.0005, n_epochs=30,
                  batch_size=64, layer1_size=1024, layer2_size=1024, policy_clip=0.3, t_max=256,gamma=0.95, gae_lambda=0.99,
                 state_type='only prices', djia_year=2019, repeat=0, entropy=0):
-
         self.figure_dir = 'plots/ppo'
         self.checkpoint_dir = 'checkpoints/ppo'
         os.makedirs(self.figure_dir, exist_ok=True)
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.t_max = t_max
         self.repeat = repeat
-
-        self.env = PortfolioEnv(action_scale=1000, state_type=state_type, djia_year=djia_year)
+        self.env = PortfolioEnv(action_scale=1000, state_type=state_type, djia_year=djia_year, repeat=repeat)
         if djia_year == 2019:
             self.intervals = self.env.get_intervals(train_ratio=0.7, valid_ratio=0.15, test_ratio=0.15)
         self.agent = Agent(action_dims=self.env.action_shape(), batch_size=batch_size, alpha=alpha,
