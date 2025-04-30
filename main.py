@@ -15,7 +15,7 @@ def main():
     mp.set_start_method('spawn')
     np.set_printoptions(suppress=True)
     all_logs=[]
-    for i in range(50):
+    for i in range(1):
         print(f"---------- round {i} ----------")
         if not os.path.isfile(f'plots/ppo/{i}2_testing.png'):
             ppo = PPO(state_type='indicators', djia_year=2019, repeat=i)

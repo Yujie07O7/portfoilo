@@ -172,7 +172,8 @@ class PortfolioEnv:
         self.history_log.append({
             "round": self.repeat,
             "date": self.get_date(),
-            "returns": returns,
+            "returns": returns
+            ,
             "weights": action.tolist(),
             "reward": reward,
             "wealth": new_wealth
