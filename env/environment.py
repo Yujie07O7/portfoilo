@@ -65,7 +65,7 @@ class PortfolioEnv:
         return self.get_state()
 
     def get_returns(self):
-        returns = self.historical_data.iloc[self.current_row][["AGGReturn(M)", "DBCReturn(M)", "SPYReturn(M)"]].tolist()
+        returns = self.historical_data.iloc[self.current_row][["DBCReturn(M)", "SHYReturn(M)", "SPYReturn(M)"]].tolist()
         return returns
 
     def get_state(self):
@@ -73,13 +73,18 @@ class PortfolioEnv:
             print(f"[Warning] current_row 超出範圍，自動設為最後一筆 index")
             self.current_row = len(self.historical_data) - 1
         if self.action_interpret == 'portfolio' and self.state_type == 'only prices':
-            return self.prices.tolist()
+            state = self.historical_data.iloc[self.current_row] [[
+                'DBCReturn(M)', 'SHYReturn(M)', 'SPYReturn(M)',
+                'DBCSTD', 'SHYSTD', 'SPYSTD',
+                'SPY-SHYCOV', 'SHY-DBCCOV', 'DBC-SPYCOV'
+            ]].tolist()
+            return np.array(state)
 
         if self.action_interpret == 'portfolio' and self.state_type == 'indicators':
             state = self.historical_data.iloc[self.current_row] [[
-                'AGGReturn(M)', 'DBCReturn(M)', 'SPYReturn(M)',
-                'AGGSTD', 'DBCSTD', 'SPYSTD',
-                'AGG-DBCCOV', 'AGG-SPYCOV', 'DBC-SPYCOV'
+                'DBCReturn(M)', 'SHYReturn(M)', 'SPYReturn(M)',
+                'DBCSTD', 'SHYSTD', 'SPYSTD',
+                'SPY-SHYCOV', 'SHY-DBCCOV', 'DBC-SPYCOV'
             ]].tolist()
             if hasattr(self, 'macro_indicators'):
                 state.extend(self.macro_indicators[self.current_row])
@@ -156,6 +161,7 @@ class PortfolioEnv:
         # reward 可以放大一點看得比較清楚
         if reward_mode == "sharpe":
             sharpe_ratio, portfolio_return = self._calculate_sharpe_ratio(action)
+            print(f"Sharpe Ratio: {sharpe_ratio:.4f}")
             reward = sharpe_ratio * 10000
         elif reward_mode == "return":
             portfolio_return = np.dot(action, returns)
@@ -172,8 +178,8 @@ class PortfolioEnv:
         self.history_log.append({
             "round": self.repeat,
             "date": self.get_date(),
-            "returns": returns
-            ,
+            "returns": returns,
+            "sharpe_ratio": sharpe_ratio,
             "weights": action.tolist(),
             "reward": reward,
             "wealth": new_wealth
@@ -185,15 +191,15 @@ class PortfolioEnv:
     def _calculate_sharpe_ratio(self, action):
         row = self.historical_data.iloc[self.current_row]
         # 取出報酬率
-        returns = row[["AGGReturn(M)", "DBCReturn(M)", "SPYReturn(M)"]].values
+        returns = row[["DBCReturn(M)", "SHYReturn(M)", "SPYReturn(M)"]].values
         # 取出標準差
-        stds = row[["AGGSTD", "DBCSTD", "SPYSTD"]].values
+        stds = row[["DBCSTD", "SHYSTD", "SPYSTD"]].values
         # 取出共變異數（上三角）
-        cov = row[["AGG-DBCCOV", "AGG-SPYCOV", "DBC-SPYCOV"]].values
+        cov = row[["SPY-SHYCOV", "SHY-DBCCOV", "DBC-SPYCOV"]].values
         cov_matrix = np.zeros((3, 3))
         np.fill_diagonal(cov_matrix, stds**2)
-        cov_matrix[0, 1] = cov_matrix[1, 0] = cov[0]  # AGG-DBC
-        cov_matrix[0, 2] = cov_matrix[2, 0] = cov[1]  # AGG-SPY
+        cov_matrix[0, 1] = cov_matrix[1, 0] = cov[0]  # DBC-HSY
+        cov_matrix[0, 2] = cov_matrix[2, 0] = cov[1]  # SHY-SPY
         cov_matrix[1, 2] = cov_matrix[2, 1] = cov[2]  # DBC-SPY
         # 計算 Sharpe Ratio
         portfolio_return = np.dot(action, returns)

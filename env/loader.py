@@ -31,7 +31,7 @@ class Loader:
             file_path = f'env/data/DJIA_2019/ticker_{ticker}.csv'
             try:
                 data = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date')
-                data = data[['AGGReturn(M)', 'DBCReturn(M)', 'SPYReturn(M)', 'AGGSTD', 'DBCSTD', 'SPYSTD', 'AGG-DBCCOV', 'AGG-SPYCOV', 'DBC-SPYCOV']]
+                data = data[['DBCReturn(M)', 'SHYReturn(M)', 'SPYReturn(M)', 'DBCSTD', 'SHYSTD', 'SPYSTD', 'SPY-SHYCCOV', 'SHY-DBCCOV', 'DBC-SPYCOV']]
                 data['Ticker'] = ticker
                 self.stocks.append(data)
 
@@ -65,7 +65,7 @@ class Loader:
             start_date = pd.to_datetime("2006-04-30")
         if end_date is None:
             end_date = self.end_date
-            end_date = pd.to_datetime("2025-03-31")
+            end_date = pd.to_datetime("2025-4-30")
         # ✅ 加入條件檢查，避免 NaT 呼叫 normalize()
         if pd.notna(start_date):
             start_date = pd.to_datetime(start_date).normalize()

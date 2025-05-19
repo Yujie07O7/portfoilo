@@ -61,6 +61,7 @@ class PPO:
             if validation_history[-5:].count(max_wealth - 1000000) != 1:
                 break
             iteration += 1
+        print(f"總共訓練了 {iteration} 次迭代")
 
         self.agent.load_models(self.checkpoint_dir)
         add_curve(training_history, 'PPO')
