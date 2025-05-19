@@ -55,17 +55,17 @@ class Loader:
 
         
     def load_marco_data(self, start_date=None, end_date=None):
-        macro = pd.read_csv('env/data/DJIA_2019/business.csv', parse_dates=True, index_col='date')
+        macro = pd.read_csv('env/data/DJIA_2019/business.csv', parse_dates=True, index_col='date', encoding='latin1')
         macro = macro.fillna(method='ffill').fillna(method='bfill')
         macro.index = pd.to_datetime(macro.index).normalize()
 
         # 若沒給日期，就從股票資料推斷
         if start_date is None:
             start_date = self.start_date
-            start_date = pd.to_datetime("2006-04-30")
+            start_date = pd.to_datetime("2006-3-31")
         if end_date is None:
             end_date = self.end_date
-            end_date = pd.to_datetime("2025-4-30")
+            end_date = pd.to_datetime("2025-5-31")
         # ✅ 加入條件檢查，避免 NaT 呼叫 normalize()
         if pd.notna(start_date):
             start_date = pd.to_datetime(start_date).normalize()

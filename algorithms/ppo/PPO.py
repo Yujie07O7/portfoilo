@@ -84,7 +84,7 @@ class PPO:
             observation = observation_
         return wealth
     
-    def test(self, verbose=1):
+    def test(self):
         return_history = [0]
         n_steps = 0
 
@@ -93,7 +93,7 @@ class PPO:
         done = False
         while not done:
             action, prob, val = self.agent.choose_action(observation)
-            observation_, reward, done, info, wealth = self.env.step(action)
+            observation_, reward, done, info, wealth = self.env.step(action, reward_mode="sharpe")
             n_steps += 1
             self.agent.remember(observation, action, prob, val, reward, done)
             if n_steps % self.t_max == 0:
@@ -102,6 +102,7 @@ class PPO:
                 
             return_history.append(wealth - 1000000)
             wealth_history.append(wealth)
+            
         self.agent.memory.clear_memory()
 
         add_curve(return_history, 'PPO')

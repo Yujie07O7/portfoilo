@@ -172,6 +172,7 @@ class PortfolioEnv:
         last_wealth = self.wealth_history[-1]
         new_wealth = last_wealth * (1 + portfolio_return)
         self.wealth_history.append(new_wealth)
+        cumulative_return_dollars =((new_wealth - 1_000_000) / 1_000_000) * 100
 
         print(f"日期: {self.get_date()}, 報酬率: {returns}, 配置: {action}")
         print(f"Reward: {reward:.2f}, Cumulative Return: {new_wealth - 1000000:.2f}")
@@ -179,10 +180,10 @@ class PortfolioEnv:
             "round": self.repeat,
             "date": self.get_date(),
             "returns": returns,
+            "cumulative_return_dollars": cumulative_return_dollars,
             "sharpe_ratio": sharpe_ratio,
             "weights": action.tolist(),
             "reward": reward,
-            "wealth": new_wealth
         })
         self.current_row += 1
         done = self.is_finished()
@@ -207,5 +208,3 @@ class PortfolioEnv:
         portfolio_std = np.sqrt(portfolio_variance) + 1e-8
         sharpe_ratio = (portfolio_return - self.freerate) / portfolio_std
         return sharpe_ratio, portfolio_return
-
-

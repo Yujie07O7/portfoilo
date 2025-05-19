@@ -21,9 +21,12 @@ def main():
             ppo = PPO(state_type='indicators', djia_year=2019, repeat=i)
             ppo.train()
             ppo.test()
+            print(f"📊 ppo.env.history_log 筆數：{len(ppo.env.history_log)}")
             all_logs.extend(ppo.env.history_log)
 
     df = pd.DataFrame(all_logs)
+    print("df columns:", df.columns)
+
     returns_df = pd.DataFrame(df["returns"].to_list(), columns=["DBC_ret", "SHY_ret", "SPY_ret"])
     weights_df = pd.DataFrame(df["weights"].to_list(), columns=["DBC_weight", "SHY_weight", "SPY_weight"])
     df.drop(columns=["returns", "weights"], inplace=True)
@@ -32,5 +35,6 @@ def main():
     os.makedirs("output", exist_ok=True)
     df.to_csv("output/ppo_rounds_history.csv", index=False)
     print("✅ 所有紀錄已儲存為 output/ppo_rounds_history.csv")
+    
 if __name__ == '__main__':
     main()
